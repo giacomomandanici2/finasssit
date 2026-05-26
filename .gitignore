@@ -14,4 +14,7 @@ __pycache__/
 .env
 
 # IDE
-.vscode/
+.vscode/.venv/
+__pycache__/
+.pytest_cache/
+.env
