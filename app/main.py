@@ -16,7 +16,7 @@ def carica_transazioni(file_path: str) -> list[TransazioneInput]:
 
 
 async def main():
-    txs = carica_transazioni("./app/data/sample_transazioni.json")
+    txs = carica_transazioni("./app/data/sample_transazioni.json") #  percorso file JSON
 
     risultati = await classifica_batch(txs)
 
