@@ -1,0 +1,10 @@
+README.md
+pyproject.toml
+app/__init__.py
+app/main.py
+app/core/__init__.py
+finassist_day01.egg-info/PKG-INFO
+finassist_day01.egg-info/SOURCES.txt
+finassist_day01.egg-info/dependency_links.txt
+finassist_day01.egg-info/requires.txt
+finassist_day01.egg-info/top_level.txt
