@@ -3,8 +3,8 @@ Name: finassist-day02
 Version: 0.1.0
 Summary: FinAssist AI — Giorno 2: FastAPI Core
 Requires-Python: <3.13,>=3.11
-Requires-Dist: fastapi>=0.110
-Requires-Dist: uvicorn[standard]>=0.27
+Requires-Dist: fastapi>=0.111
+Requires-Dist: uvicorn[standard]>=0.29
 Requires-Dist: pydantic>=2.5
 Requires-Dist: pydantic-settings>=2.0
 Provides-Extra: dev
