@@ -23,3 +23,7 @@ class ExternalServiceError(FinAssistError):
         super().__init__(f"Errore chiamando {service}", status_code="EXTERNAL_SERVICE_ERROR")
         self.service = service
         self.original = original
+
+class UpstreamTimeoutError(FinAssistError):
+    def __init__(self, message: str = "Timeout"):
+        super().__init__(message, code="TIMEOUT_ERROR")        

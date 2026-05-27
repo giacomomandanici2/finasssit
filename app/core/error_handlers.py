@@ -14,6 +14,7 @@ from app.core.exceptions import (
 logger = logging.getLogger("finassist.errors")
 
 
+
 def _error_response(request: Request, exc: FinAssistError, http_status: int) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
     payload = {
