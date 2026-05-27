@@ -1,7 +1,8 @@
 """Router per gli endpoint /transactions."""
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, status, Depends
 from app.services.scoring_service import ScoringService
+from app.dependencies import get_scoring_service
 
 from app.schemas.transactions import (
     BatchScoreRequest,
@@ -14,7 +15,6 @@ from app.schemas.transactions import (
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 router_new = APIRouter(prefix="/api/v1", tags=["transactions"])
 
-service = ScoringService()
 recent_transactions: list[TransactionScored] = []
 
 
@@ -24,7 +24,7 @@ recent_transactions: list[TransactionScored] = []
     status_code=status.HTTP_200_OK,
     summary="classifica una transazione",
 )
-async def score_transaction(payload: TransactionIn) -> TransactionScored:
+async def score_transaction(payload: TransactionIn, service:ScoringService = Depends(get_scoring_service)) -> TransactionScored:
     """Classifica una singola transazione."""
     result = await service.score(payload)
 
@@ -39,7 +39,7 @@ async def score_transaction(payload: TransactionIn) -> TransactionScored:
     status_code=status.HTTP_200_OK,
     summary="classifica batch di transazioni",
 )
-async def score_batch(payload: list[TransactionIn]) -> list[TransactionScored]:
+async def score_batch(payload: list[TransactionIn], service: ScoringService = Depends(get_scoring_service)) -> list[TransactionScored]:
     """Classifica una singola transazione."""
     result = await service.post_score_batch(payload)
 
