@@ -1,4 +1,17 @@
+# Virtual environment
 .venv/
+
+# Python cache
 __pycache__/
+*.pyc
+
+# Test/cache tools
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# VS Code
+.vscode/
+
+# Environment variables
 .env
