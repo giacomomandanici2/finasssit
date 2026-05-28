@@ -8,7 +8,7 @@ from app.models.chat_session import ChatSession
 class Message(Base):
         __tablename__ = "messages"
         id: Mapped[int] = mapped_column(Integer, primary_key=True) # il mapped mi definisce il tipo di dato, il type hints
-        session_id: Mapped[int] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"))
+        session_id: Mapped[int] = mapped_column(ForeignKey("chat_sessions.id", ondelete="CASCADE"))
         role: Mapped[str] = mapped_column(String)
         content: Mapped[str] = mapped_column(Text)        
         created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
