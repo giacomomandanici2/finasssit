@@ -1,29 +1,34 @@
 [project]
-name = "finassist-day01"
+name = "finassist-day03"
 version = "0.1.0"
-description = "FinAssist AI — Giorno 1: Python avanzato per backend"
+description = "FinAssist AI — Giorno 3: SQLAlchemy 2.0 async + Alembic + PostgreSQL"
 requires-python = ">=3.11,<3.13"
 dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
     "pydantic>=2.5",
     "pydantic-settings>=2.0",
+    "sqlalchemy[asyncio]>=2.0.30",
+    "asyncpg>=0.29",
+    "alembic>=1.13",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    "httpx>=0.27",
     "ruff>=0.4",
     "mypy>=1.10",
+    "psycopg2-binary>=2.9"  # SOLO per alembic sync
+
 ]
 
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
-[tool.ruff]
-line-length = 100
-target-version = "py311"
-
-[tool.mypy]
-python_version = "3.11"
-strict = true
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+[tool.setuptools]
+packages = ["app"]
