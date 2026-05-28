@@ -27,16 +27,10 @@ class FasciaRischio(StrEnum):
 
 
 class TransactionRequest(BaseModel):
-    """Payload di una transazione da classificare."""
-
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
     id: Annotated[str, Field(pattern=r"^TXN\d{6}$")]
     importo: Annotated[Decimal, Field(decimal_places=2)]
     causale: Causale
     data: datetime
-    iban_contropartita: str | None = None
-    paese_contropartita: str | None = None
 
 """class TransactionIn"""
 class TransactionIn(BaseModel):
@@ -49,7 +43,8 @@ class TransactionIn(BaseModel):
 
 class TransactionScored(BaseModel):
     """Risposta: transazione con score e fascia di rischio."""
-    rischio: FasciaRischio
+    transazione:TransactionIn
+    fascia: FasciaRischio
     score:int = Field(ge = 0, le=100)
 
 
