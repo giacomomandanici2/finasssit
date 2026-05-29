@@ -7,10 +7,10 @@ from app.core.db import engine
 @asynccontextmanager
 async def lifespan(app: FastAPI):
 
-    print("🚀 FinAssist starting...")
+    print("[startup] FinAssist starting...")
 
     yield
 
-    print("🛑 Closing database connections...")
+    print("[shutdown] Closing database connections...")
 
     await engine.dispose()
