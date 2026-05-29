@@ -23,7 +23,7 @@ engine: AsyncEngine = create_async_engine(
 
 SessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
     bind=engine,
-    expire_on_commit=False,       # ⚠️ critico, vedi nota sotto
+    expire_on_commit=False,     # Se è True:dopo commit SQLAlchemy invalida gli oggetti.
     autoflush=False,
 )
 

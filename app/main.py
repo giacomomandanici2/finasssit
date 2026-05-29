@@ -1,33 +1,13 @@
-import asyncio
-import json
-from pathlib import Path
+from fastapi import FastAPI
 
-from app.core.modelli import TransazioneInput
-from app.core.classificatore import classifica_batch
+from app.api.transactions import router as transactions_router
+from app.core.lifespan import lifespan
 
 
-def carica_transazioni(file_path: str) -> list[TransazioneInput]:
-    path = Path(file_path)
+app = FastAPI(
+    title="FinAssist AI",
+    version="0.1.0",
+    lifespan=lifespan,
+)
 
-    with path.open("r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    return [TransazioneInput(**item) for item in data]
-
-
-async def main():
-    txs = carica_transazioni("./app/data/sample_transazioni.json") #  percorso file JSON
-
-    risultati = await classifica_batch(txs)
-
-    print("\nREPORT FINASSIST AI\n")
-
-    for r in risultati:
-        print(
-            f"- ID: {r.id} | Importo: {r.importo} | "
-            f"Rischio: {r.rischio} | Motivo: {r.motivazione}"
-        )
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+app.include_router(transactions_router)
