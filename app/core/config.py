@@ -12,5 +12,10 @@ class Settings(BaseSettings):
     app_name: str = "FinAssist AI"
     debug: bool = False
 
+    azure_openai_endpoint: str = ""
+    azure_openai_key: str = ""
+    azure_openai_deployment: str = ""
+    azure_openai_api_version: str = "2024-10-21"
+
 
 settings = Settings()

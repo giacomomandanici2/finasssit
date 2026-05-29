@@ -7,3 +7,4 @@ finassist_day03.egg-info/SOURCES.txt
 finassist_day03.egg-info/dependency_links.txt
 finassist_day03.egg-info/requires.txt
 finassist_day03.egg-info/top_level.txt
+tests/test_integration.py
