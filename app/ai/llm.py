@@ -1,9 +1,11 @@
 import asyncio
+import hashlib
 import json
 import logging
 import time
+import uuid
 from functools import lru_cache
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from openai import AsyncAzureOpenAI
 from openai import (
@@ -25,6 +27,9 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 B = TypeVar("B", bound=BaseModel)
+
+_COST_PER_INPUT_TOKEN = 2.50 / 1_000_000
+_COST_PER_OUTPUT_TOKEN = 10.00 / 1_000_000
 
 
 class CircuitBreakerOpenError(Exception): ...
@@ -95,6 +100,7 @@ class LLMClient:
         )
         self._deployment = settings.azure_openai_deployment
         self._circuit_breaker = AsyncCircuitBreaker()
+        self._last_usage: Any = None
 
     # chat è il metodo che usi per parlare con il modello Azure OpenAI.
     # Concretamente: gli passi una lista di messaggi (tipo [{"role": "user", "content": "Classifica questa transazione"}]) e uno schema Pydantic (es. TransazioneScored), e lui:
@@ -104,9 +110,20 @@ class LLMClient:
     # Quindi invece di ricevere un testo libero e doverlo parsare a mano, ottieni direttamente un oggetto tipizzato pronto all'uso. È un wrapper che nasconde tutta la complessità (chiamata HTTP, retry, timeout, validazione JSON, circuit breaker).
 
     async def chat(self, messages: list[dict], schema: type[B]) -> B:
-        return await self._circuit_breaker.call(
-            lambda: self._chat_with_retry(messages, schema),
-        )
+        request_id = str(uuid.uuid4())
+        start = time.monotonic()
+
+        try:
+            result = await self._circuit_breaker.call(
+                lambda: self._chat_with_retry(messages, schema),
+            )
+            latency_ms = (time.monotonic() - start) * 1000
+            self._log_call(request_id, latency_ms, "success", messages)
+            return result
+        except Exception:
+            latency_ms = (time.monotonic() - start) * 1000
+            self._log_call(request_id, latency_ms, "error", messages)
+            raise
 
     @retry(
         stop=stop_after_attempt(3),
@@ -132,12 +149,53 @@ class LLMClient:
             },
         )
 
+        self._last_usage = response.usage
+
         content = response.choices[0].message.content
         if content is None:
             raise ValueError("LLM returned empty response")
         return schema.model_validate_json(content)
 
-#qui sto creando l'istanza della llm che poi tramite Dep inj viene injettata dove serve
+    def _log_call(
+        self,
+        request_id: str,
+        latency_ms: float,
+        status: str,
+        messages: list[dict],
+    ) -> None:
+        usage = self._last_usage
+        prompt_tokens = usage.prompt_tokens if usage else 0
+        completion_tokens = usage.completion_tokens if usage else 0
+
+        prompt_len = sum(len(m.get("content", "")) for m in messages)
+        prompt_hash = hashlib.sha256(
+            json.dumps(messages, sort_keys=True).encode()
+        ).hexdigest()[:16]
+
+        log_data: dict[str, Any] = {
+            "request_id": request_id,
+            "model": self._deployment,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+            "latency_ms": round(latency_ms, 1),
+            "estimated_cost_usd": round(
+                prompt_tokens * _COST_PER_INPUT_TOKEN
+                + completion_tokens * _COST_PER_OUTPUT_TOKEN,
+                6,
+            ),
+            "status": status,
+            "prompt_chars": prompt_len,
+            "prompt_hash": prompt_hash,
+        }
+
+        if settings.debug:
+            log_data["prompt_messages"] = messages
+
+        logger.info(json.dumps(log_data, default=str))
+
+
+# qui sto creando l'istanza della llm che poi tramite Dep inj viene injettata dove serve
 @lru_cache
 def get_llm() -> LLMClient:
     return LLMClient()
