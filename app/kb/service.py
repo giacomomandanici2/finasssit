@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import logging
 import os
+import time
 from datetime import datetime
 
 from openai import AsyncOpenAI
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 
 class KBChunkResult(BaseModel):
@@ -39,11 +43,16 @@ class KBSearchService:
         roles: list[str],
         k: int = 10,
     ) -> list[KBChunkResult]:
+        start = time.monotonic()
+
         response = await self._client.embeddings.create(
             model="text-embedding-3-small",
             input=[query],
         )
         embedding = response.data[0].embedding
+
+        count_sql = text("SELECT COUNT(*) FROM kb_chunks WHERE access_role = ANY(:roles)")
+        total = await self.db.scalar(count_sql, {"roles": roles}) or 0
 
         sql = text("""
             SELECT
@@ -57,7 +66,7 @@ class KBSearchService:
         """)
 
         rows = await self.db.execute(sql, {"q": embedding, "roles": roles, "k": k})
-        return [
+        results = [
             KBChunkResult(
                 id=r.id,
                 document_id=r.document_id,
@@ -70,3 +79,16 @@ class KBSearchService:
             )
             for r in rows
         ]
+
+        latency_ms = (time.monotonic() - start) * 1000
+        avg_distance = sum(r.score for r in results) / len(results) if results else 0.0
+
+        logger.info(
+            "KB search | k=%d latency_ms=%.1f avg_distance=%.4f total_for_roles=%d",
+            k,
+            latency_ms,
+            avg_distance,
+            total,
+        )
+
+        return results
