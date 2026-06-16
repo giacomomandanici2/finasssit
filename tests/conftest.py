@@ -23,7 +23,7 @@ from app.models.base import Base
 
 @pytest.fixture(scope="session")
 def postgres_container() -> PostgresContainer:
-    with PostgresContainer("postgres:16-alpine") as pc:
+    with PostgresContainer("pgvector/pgvector:pg16") as pc:
         yield pc
 
 
