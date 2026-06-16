@@ -2,7 +2,7 @@ import os
 
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 from typing import Any
 
 import pytest
@@ -22,7 +22,7 @@ from app.models.base import Base
 
 
 @pytest.fixture(scope="session")
-def postgres_container() -> PostgresContainer:
+def postgres_container() -> Generator[PostgresContainer, Any, Any]:
     with PostgresContainer("pgvector/pgvector:pg16") as pc:
         yield pc
 
@@ -33,7 +33,7 @@ def postgres_async_url(postgres_container: PostgresContainer) -> str:
 
 
 @pytest.fixture
-async def async_engine(postgres_async_url: str) -> AsyncEngine:
+async def async_engine(postgres_async_url: str) -> AsyncGenerator[AsyncEngine, Any]:
     engine = create_async_engine(postgres_async_url, pool_size=2, max_overflow=2)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
