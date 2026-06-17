@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from app.api.agent import router as agent_router
 from app.api.kb import router as kb_router
 from app.api.rag import router as rag_router
 from app.api.transactions import router as transactions_router
@@ -19,3 +20,4 @@ app.include_router(v1_router)
 app.include_router(kb_router)
 app.include_router(auth_router)
 app.include_router(rag_router)
+app.include_router(agent_router)
