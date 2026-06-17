@@ -14,6 +14,10 @@ class Settings(BaseSettings):
 
     api_token: str = ""
 
+    jwt_secret: str = "change-me"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 60
+
     azure_openai_endpoint: str = ""
     azure_openai_key: str = ""
     azure_openai_deployment: str = ""
