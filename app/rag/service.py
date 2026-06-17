@@ -32,6 +32,7 @@ class RAGService:
         self._rewriter = QueryRewriter(self._llm)
         self._retriever = KBRetriever(db, user_role)
         self._builder = PromptBuilder()
+        self.last_chunks: list[dict] = []
 
     async def ask(self, query: str, k: int = 5) -> RAGResponse:
         query = query.strip()
@@ -43,6 +44,7 @@ class RAGService:
 
         # 2 — Role-filtered KB retrieval
         chunks = await self._retriever.retrieve(search_query, k=k)
+        self.last_chunks = chunks
 
         if not chunks:
             return RAGResponse(
