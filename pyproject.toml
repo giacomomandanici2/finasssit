@@ -17,7 +17,10 @@ dependencies = [
     "pgvector>=0.3",
     "pyyaml>=6.0",
     "python-json-logger>=2.0",
-    "tiktoken>=0.7"
+    "tiktoken>=0.7",
+    "pyjwt>=2.8",
+    "passlib[bcrypt]>=1.7",
+    "redis>=5.0"
 ]
 
 [project.optional-dependencies]
