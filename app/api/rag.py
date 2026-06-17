@@ -1,10 +1,11 @@
 import uuid
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
 from app.auth.deps import CurrentUser
 from app.core.db import SessionDep
+from app.core.rate_limiter import rate_limit
 from app.models.chat_session import ChatSession
 from app.models.message import Message
 from app.repositories.messages import MessagesRepository
@@ -15,7 +16,11 @@ from app.rag.schemas import (
 )
 from app.rag.service import RAGService
 
-router = APIRouter(prefix="/api/v1/rag", tags=["rag"])
+router = APIRouter(
+    prefix="/api/v1/rag",
+    tags=["rag"],
+    dependencies=[Depends(rate_limit)],
+)
 
 
 @router.post("/answer", response_model=RAGAnswerResponse)
