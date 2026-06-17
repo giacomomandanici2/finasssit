@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from datapizza.tools import tool
+from app.agents.exceptions import ToolError
 
 _IBAN_COUNTRY_MAP = {
     "AD": "Andorra",
@@ -93,5 +94,14 @@ def lookup_iban_country(
     """Estrae il paese di origine da un IBAN in modo deterministico."""
     code = iban.strip().replace(" ", "")[:2].upper()
     if len(code) < 2 or not code.isalpha():
-        return "IBAN non valido: primi due caratteri devono essere lettere"
-    return _IBAN_COUNTRY_MAP.get(code, f"Paese sconosciuto per codice: {code}")
+        raise ToolError(
+            "IBAN non valido: i primi due caratteri devono essere lettere",
+            tool_name="lookup_iban_country",
+        )
+    country = _IBAN_COUNTRY_MAP.get(code)
+    if country is None:
+        raise ToolError(
+            f"Paese sconosciuto per codice: {code}",
+            tool_name="lookup_iban_country",
+        )
+    return country

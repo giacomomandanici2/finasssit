@@ -1,8 +1,12 @@
-from typing import Annotated
+import asyncio
+from collections.abc import Callable
+from functools import wraps
+from typing import Annotated, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from datapizza.tools import tool
+from app.agents.exceptions import ToolError, ToolForbidden, ToolTimeout
 from app.agents.reference_data import lookup_iban_country
 from app.rag.service import RAGService
 from app.repositories.transaction import TransactionsRepository
@@ -32,8 +36,42 @@ _USER_IBANS: dict[str, list[str]] = {
 }
 
 
+def safe_tool(
+    func: Callable[..., Any] | None = None,
+    *,
+    timeout: float | None = None,
+) -> Any:
+    if func is None:
+        return lambda f: safe_tool(func=f, timeout=timeout)
+
+    @wraps(func)
+    async def wrapper(*args: Any, **kwargs: Any) -> str:
+        coro = func(*args, **kwargs)
+        try:
+            if timeout is not None:
+                result = await asyncio.wait_for(coro, timeout=timeout)
+            else:
+                result = await coro
+        except asyncio.TimeoutError:
+            return (
+                f"Operazione interrotta: tempo massimo di {timeout}s "
+                f"superato per il tool {func.__name__}"
+            )
+        except ToolForbidden as exc:
+            return f"Accesso negato: {exc}"
+        except ToolError as exc:
+            return f"Errore nel tool {func.__name__}: {exc}"
+        except Exception as exc:
+            return f"Errore imprevisto nel tool {func.__name__}: {exc}"
+        else:
+            return result
+
+    return wrapper
+
+
 def make_get_saldo(user_id: str):
     @tool
+    @safe_tool
     async def get_saldo(
         iban: Annotated[str, "IBAN di cui ottenere il saldo"] = "",
     ) -> str:
@@ -41,9 +79,9 @@ def make_get_saldo(user_id: str):
         iban_clean = iban.strip().replace(" ", "")
         owned = _USER_IBANS.get(user_id, [])
         if iban_clean not in owned:
-            return (
-                f"Accesso negato: l'IBAN {iban_clean} "
-                f"non appartiene all'utente corrente"
+            raise ToolForbidden(
+                f"L'IBAN {iban_clean} non appartiene all'utente corrente",
+                tool_name="get_saldo",
             )
         saldo = _MOCK_SALDI.get(iban_clean)
         if saldo is None:
@@ -55,6 +93,7 @@ def make_get_saldo(user_id: str):
 
 def make_cerca_documenti(db: AsyncSession, role: str = "retail"):
     @tool
+    @safe_tool(timeout=30.0)
     async def cerca_documenti(
         query: Annotated[
             str,
@@ -70,15 +109,20 @@ def make_cerca_documenti(db: AsyncSession, role: str = "retail"):
 
 
 @tool
+@safe_tool
 async def paese_da_iban(
     iban: Annotated[str, "IBAN da analizzare (può contenere spazi)"] = "",
 ) -> str:
     """Determina il paese di origine di un IBAN in modo deterministico."""
+    code = iban.strip().replace(" ", "")[:2].upper()
+    if len(code) < 2 or not code.isalpha():
+        return "IBAN non valido: i primi due caratteri devono essere lettere"
     return lookup_iban_country(iban=iban)
 
 
 def make_storico_transazioni(user_id: str, db: AsyncSession):
     @tool
+    @safe_tool
     async def storico_transazioni(
         iban: Annotated[
             str,
@@ -90,9 +134,9 @@ def make_storico_transazioni(user_id: str, db: AsyncSession):
         iban_clean = iban.strip().replace(" ", "")
         owned = _USER_IBANS.get(user_id, [])
         if iban_clean not in owned:
-            return (
-                f"Accesso negato: l'IBAN {iban_clean} "
-                f"non appartiene all'utente corrente"
+            raise ToolForbidden(
+                f"L'IBAN {iban_clean} non appartiene all'utente corrente",
+                tool_name="storico_transazioni",
             )
         repo = TransactionsRepository(db)
         transactions = await repo.list_recent(limit=limit)
