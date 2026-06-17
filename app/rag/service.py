@@ -40,7 +40,7 @@ class RAGService:
             return RAGResponse(answer="", citations=[])
 
         # 1 — Query rewriting
-        search_query = await self._rewriter.rewrite(query)
+        search_query = await self._rewriter.rewrite(query, role=self._user_role)
 
         # 2 — Role-filtered KB retrieval
         chunks = await self._retriever.retrieve(search_query, k=k)
