@@ -2,11 +2,15 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.agents.factory import build_agent
+from app.agents.tracing import TracingHooks, agent_run_span, get_tracer
 from app.auth.deps import CurrentUser
 from app.core.db import SessionDep
 from app.models.chat_session import ChatSession
 from app.models.message import Message
 from app.repositories.messages import MessagesRepository
+
+
+_tracer = get_tracer()
 
 
 class AgentAskRequest(BaseModel):
@@ -41,8 +45,15 @@ async def agent_ask(
         db.add(session)
         await db.flush()
 
-    agent = build_agent(user=current_user, db=db)
-    result = await agent.a_run(body.query)
+    hooks = TracingHooks(_tracer)
+    agent = build_agent(user=current_user, db=db, hooks=hooks)
+
+    with agent_run_span(
+        tracer=_tracer,
+        user_id=str(current_user.id),
+        query=body.query,
+    ):
+        result = await agent.a_run(body.query)
 
     repo = MessagesRepository(db)
     await repo.create(

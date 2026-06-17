@@ -1,6 +1,6 @@
 import logging
 
-from datapizza.agents import Agent
+from datapizza.agents import Agent, AgentHooks
 from datapizza.clients.factory import ClientFactory, Provider
 from datapizza.clients.mock_client import MockClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,7 @@ from app.agents.tools import (
     make_storico_transazioni,
     paese_da_iban,
 )
+from app.agents.tracing import get_tracer
 from app.core.config import settings
 from app.models.user import User
 
@@ -51,7 +52,11 @@ def _build_client() -> MockClient:
     )
 
 
-def build_agent(user: User, db: AsyncSession) -> Agent:
+def build_agent(
+    user: User,
+    db: AsyncSession,
+    hooks: AgentHooks | None = None,
+) -> Agent:
     client = _build_client()
 
     user_id = f"user_{user.id:03d}"
@@ -69,6 +74,7 @@ def build_agent(user: User, db: AsyncSession) -> Agent:
         system_prompt=_SYSTEM_PROMPT,
         tools=tools,
         max_steps=6,
+        hooks=hooks,
     )
 
     return agent
