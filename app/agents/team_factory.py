@@ -60,12 +60,13 @@ class AgentTeamFactory:
         specialists = _ROLE_SPECIALIST_MAP.get(self._user.role, [])
         agents: list[Agent] = []
 
-        def _make_hooks():
+        def _make_hooks(agent_name: str):
             if hooks is not None:
                 return hooks
             return TracingHooks(
                 tracer=self._tracer,
                 rate_limit_tracker=rate_limit_tracker,
+                agent_name=agent_name,
             )
 
         if "operations" in specialists:
@@ -74,7 +75,7 @@ class AgentTeamFactory:
                     user_id=self._user_id,
                     db=self._db,
                     client=self.client,
-                    hooks=_make_hooks(),
+                    hooks=_make_hooks("operations"),
                 )
             )
         if "compliance" in specialists:
@@ -82,14 +83,14 @@ class AgentTeamFactory:
                 build_compliance_agent(
                     db=self._db,
                     client=self.client,
-                    hooks=_make_hooks(),
+                    hooks=_make_hooks("compliance"),
                 )
             )
         if "rating" in specialists:
             agents.append(
                 build_rating_agent(
                     client=self.client,
-                    hooks=_make_hooks(),
+                    hooks=_make_hooks("rating"),
                 )
             )
 

@@ -53,11 +53,14 @@ def get_tracer() -> trace.Tracer:
 class TracingHooks(AgentHooks):
     """Hooks with nested span support + rate limit per-step.
 
-    Span hierarchy:
-        multi_agent.run
-        └─ triage.step.N
-            ├─ specialist.call.<name>   (via can_call / tool call)
-            └─ specialist.step.M        (nested inside specialist call)
+    Span hierarchy (observability convention):
+        agent.run.triage
+        └─ agent.step.<agent_name>.N
+            ├─ tool.<specialist_name>       (can_call → specialist invocation)
+            │   └─ agent.run.<specialist_name>
+            │       └─ agent.step.<specialist_name>.M
+            │           └─ tool.<tool_name>  (actual tool execution)
+            └─ ... (other tool calls)
 
     Ogni step di OGNI agente decrementa il RateLimitTracker condiviso.
     """
@@ -66,19 +69,22 @@ class TracingHooks(AgentHooks):
         self,
         tracer: trace.Tracer | None = None,
         rate_limit_tracker=None,
+        agent_name: str = "unknown",
     ) -> None:
         self._tracer = tracer or get_tracer()
         self._span: trace.Span | None = None
         self._rate_limit = rate_limit_tracker
+        self._agent_name = agent_name
 
     def before_step(self, context: StepContext) -> None:
         if self._rate_limit is not None:
             self._rate_limit.consume()
 
-        span_name = f"agent.step.{context.step_index}"
+        span_name = f"agent.step.{self._agent_name}.{context.step_index}"
         self._span = self._tracer.start_as_current_span(span_name)
         self._span.__enter__()
         self._span.set_attribute("type", "agent.step")
+        self._span.set_attribute("agent", self._agent_name)
         self._span.set_attribute("step", context.step_index)
         self._span.set_attribute("task_input", context.task_input)
 
@@ -92,42 +98,34 @@ class TracingHooks(AgentHooks):
 @contextmanager
 def agent_run_span(
     tracer: trace.Tracer,
-    user_id: str,
-    query: str,
+    agent_name: str,
+    user_id: str | None = None,
+    query: str | None = None,
 ) -> Iterator[trace.Span]:
-    with tracer.start_as_current_span("agent.run") as span:
+    span_name = f"agent.run.{agent_name}"
+    with tracer.start_as_current_span(span_name) as span:
         span.set_attribute("type", "agent.run")
-        span.set_attribute("user_id", user_id)
-        span.set_attribute("query", query)
+        span.set_attribute("agent", agent_name)
+        if user_id:
+            span.set_attribute("user_id", user_id)
+        if query:
+            span.set_attribute("query", query)
         yield span
 
 
 @contextmanager
-def multi_agent_run_span(
+def tool_call_span(
     tracer: trace.Tracer,
-    user_id: str,
-    query: str,
+    tool_name: str,
+    agent_name: str | None = None,
 ) -> Iterator[trace.Span]:
-    with tracer.start_as_current_span("multi_agent.run") as span:
-        span.set_attribute("type", "multi_agent.run")
-        span.set_attribute("user_id", user_id)
-        span.set_attribute("query", query)
-        span.set_attribute("max_depth", 2)
+    span_name = f"tool.{tool_name}"
+    with tracer.start_as_current_span(span_name) as span:
+        span.set_attribute("type", "tool")
+        span.set_attribute("tool", tool_name)
+        if agent_name:
+            span.set_attribute("agent", agent_name)
         yield span
-
-
-@contextmanager
-def specialist_call_span(
-    tracer: trace.Tracer,
-    specialist_name: str,
-    task: str,
-) -> Iterator[trace.Span]:
-    with tracer.start_as_current_span(f"specialist.call.{specialist_name}") as span:
-        span.set_attribute("type", "specialist.call")
-        span.set_attribute("specialist", specialist_name)
-        span.set_attribute("task", task)
-        yield span
-
 
 
 @contextmanager

@@ -7,7 +7,7 @@ from app.agents.rate_limit import RateLimitTracker
 from app.agents.triage import build_triage_agent
 from app.agents.tracing import (
     TracingHooks,
-    multi_agent_run_span,
+    agent_run_span,
     get_tracer,
 )
 from app.auth.deps import CurrentUser
@@ -56,7 +56,11 @@ async def agent_ask(
         await db.flush()
 
     rate_tracker = RateLimitTracker()
-    hooks = TracingHooks(_tracer, rate_limit_tracker=rate_tracker)
+    hooks = TracingHooks(
+        _tracer,
+        rate_limit_tracker=rate_tracker,
+        agent_name="triage",
+    )
     agent = build_triage_agent(
         user=current_user,
         db=db,
@@ -64,8 +68,9 @@ async def agent_ask(
         rate_limit_tracker=rate_tracker,
     )
 
-    with multi_agent_run_span(
+    with agent_run_span(
         tracer=_tracer,
+        agent_name="triage",
         user_id=str(current_user.id),
         query=body.query,
     ):
