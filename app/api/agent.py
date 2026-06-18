@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
@@ -16,6 +18,8 @@ from app.repositories.messages import MessagesRepository
 
 _tracer = get_tracer()
 
+_SPECIALIST_NAMES = {"operations_agent", "compliance_agent", "rating_agent"}
+
 
 class AgentAskRequest(BaseModel):
     query: str = Field(min_length=1)
@@ -24,8 +28,9 @@ class AgentAskRequest(BaseModel):
 
 class AgentAskResponse(BaseModel):
     answer: str
-    steps_used: int
-    tools_called: list[str]
+    specialist_used: str | None = None
+    steps_total: int
+    citations: list[str] = []
 
 
 router = APIRouter(prefix="/api/v1/agent", tags=["agent"])
@@ -71,8 +76,22 @@ async def agent_ask(
         )
     )
 
+    specialist_used = None
+    for block in result.tools_used:
+        if block.name in _SPECIALIST_NAMES:
+            specialist_used = block.name
+            break
+
+    answer_text = result.text or ""
+    citations = sorted(
+        set(
+            m for m in re.findall(r"\[(\d+)\]", answer_text)
+        )
+    )
+
     return AgentAskResponse(
-        answer=result.text or "",
-        steps_used=result.index + 1,
-        tools_called=[b.name for b in result.tools_used],
+        answer=answer_text,
+        specialist_used=specialist_used,
+        steps_total=result.index + 1,
+        citations=citations,
     )
