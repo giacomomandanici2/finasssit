@@ -1,8 +1,12 @@
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.agents.factory import build_agent
-from app.agents.tracing import TracingHooks, agent_run_span, get_tracer
+from app.agents.triage_agent import build_triage_agent
+from app.agents.tracing import (
+    TracingHooks,
+    multi_agent_run_span,
+    get_tracer,
+)
 from app.auth.deps import CurrentUser
 from app.core.db import SessionDep
 from app.models.chat_session import ChatSession
@@ -46,9 +50,9 @@ async def agent_ask(
         await db.flush()
 
     hooks = TracingHooks(_tracer)
-    agent = build_agent(user=current_user, db=db, hooks=hooks)
+    agent = build_triage_agent(user=current_user, db=db, hooks=hooks)
 
-    with agent_run_span(
+    with multi_agent_run_span(
         tracer=_tracer,
         user_id=str(current_user.id),
         query=body.query,
@@ -63,12 +67,12 @@ async def agent_ask(
         Message(
             session_id=session.id,
             role="assistant",
-            content=result.final_step.text or "",
+            content=result.text or "",
         )
     )
 
     return AgentAskResponse(
-        answer=result.final_step.text or "",
-        steps_used=result.final_step.index + 1,
-        tools_called=[b.name for b in result.final_step.tools_used],
+        answer=result.text or "",
+        steps_used=result.index + 1,
+        tools_called=[b.name for b in result.tools_used],
     )
