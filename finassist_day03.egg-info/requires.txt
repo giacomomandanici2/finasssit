@@ -6,6 +6,8 @@ sqlalchemy[asyncio]>=2.0.30
 asyncpg>=0.29
 alembic>=1.13
 datapizza-ai
+opentelemetry-sdk>=1.25
+opentelemetry-exporter-otlp>=1.25
 tenacity>=8.3
 openai>=1.55
 pgvector>=0.3

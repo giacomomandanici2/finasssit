@@ -11,6 +11,8 @@ Requires-Dist: sqlalchemy[asyncio]>=2.0.30
 Requires-Dist: asyncpg>=0.29
 Requires-Dist: alembic>=1.13
 Requires-Dist: datapizza-ai
+Requires-Dist: opentelemetry-sdk>=1.25
+Requires-Dist: opentelemetry-exporter-otlp>=1.25
 Requires-Dist: tenacity>=8.3
 Requires-Dist: openai>=1.55
 Requires-Dist: pgvector>=0.3
