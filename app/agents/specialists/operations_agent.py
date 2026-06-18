@@ -1,4 +1,4 @@
-import uuid
+import hashlib
 from typing import Annotated
 
 from datapizza.agents import Agent
@@ -8,7 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.exceptions import ToolError, ToolForbidden
 from app.agents.tools import _MOCK_SALDI, _USER_IBANS, safe_tool
-from app.repositories.transaction import TransactionsRepository
+from app.core.redis import get_redis
+
+_IDEMP_TTL_SECONDS = 3600
 
 _SYSTEM_PROMPT = """Sei l'agente Operazioni Bancarie. Gestisci saldi,
 storico transazioni e bonifici per conto dell'utente.
@@ -17,10 +19,15 @@ Regole:
 - Rispondi sempre in italiano.
 - Usa get_saldo per verificare la disponibilità prima di un bonifico.
 - Usa storico_transazioni per mostrare i movimenti recenti.
-- Per inviare un bonifico usa invia_bonifico con una idempotency_key unica.
+- Per inviare un bonifico usa invia_bonifico con una causale descrittiva.
 - Non inventare IBAN. Se non hai un IBAN valido, chiedilo all'utente.
 - Se l'IBAN non appartiene all'utente, nega l'accesso.
 """
+
+
+def _make_idemp_key(user_id: str, iban_src: str, iban_dst: str, importo: float, causale: str) -> str:
+    raw = f"{user_id}|{iban_src}|{iban_dst}|{importo}|{causale}"
+    return hashlib.sha256(raw.encode()).hexdigest()
 
 
 def make_invia_bonifico(user_id: str):
@@ -32,21 +39,11 @@ def make_invia_bonifico(user_id: str):
         iban_sorgente: Annotated[str, "IBAN da cui prelevare i fondi"] = "",
         iban_destinazione: Annotated[str, "IBAN destinatario del bonifico"] = "",
         importo: Annotated[float, "Importo del bonifico in EUR"] = 0.0,
-        idempotency_key: Annotated[
-            str,
-            "Chiave univoca per garantire l'idempotenza del bonifico. "
-            "Se riutilizzi la stessa key, la richiesta viene ignorata.",
-        ] = "",
+        causale: Annotated[str, "Causale / descrizione del bonifico"] = "",
     ) -> str:
         """Invia un bonifico da un IBAN sorgente a un IBAN destinatario.
-        Idempotente: stessa idempotency_key → operazione già eseguita."""
-        if not idempotency_key:
-            raise ToolError("idempotency_key obbligatoria per invia_bonifico", tool_name="invia_bonifico")
-
-        idempotency_hash = f"{user_id}:{idempotency_key}"
-        if idempotency_hash in _processed:
-            return "Bonifico già eseguito in precedenza (idempotency key già processata)."
-
+        Idempotente: la stessa operazione (stessi parametri) viene eseguita
+        una sola volta entro 1 ora."""
         iban_src = iban_sorgente.strip().replace(" ", "")
         iban_dst = iban_destinazione.strip().replace(" ", "")
 
@@ -65,13 +62,28 @@ def make_invia_bonifico(user_id: str):
                 tool_name="invia_bonifico",
             )
 
+        idemp_key = _make_idemp_key(user_id, iban_src, iban_dst, importo, causale)
+        redis_key = f"bonifico:idemp:{idemp_key}"
+
+        redis = get_redis()
+        if redis is not None:
+            already = await redis.set(redis_key, "1", nx=True, ex=_IDEMP_TTL_SECONDS)
+            if already is None:
+                return (
+                    f"Bonifico già eseguito in precedenza (operazione identica "
+                    f"negli ultimi {_IDEMP_TTL_SECONDS // 3600}h)."
+                )
+        else:
+            if idemp_key in _processed:
+                return "Bonifico già eseguito in precedenza."
+            _processed.add(idemp_key)
+
         _MOCK_SALDI[iban_src] = saldo - importo
-        _processed.add(idempotency_hash)
 
         return (
             f"Bonifico eseguito: € {importo:,.2f} da {iban_src} a {iban_dst}. "
-            f"Nuovo saldo {iban_src}: € {_MOCK_SALDI[iban_src]:,.2f}. "
-            f"ID richiesta: {idempotency_key}"
+            f"Causale: {causale or 'nessuna'}. "
+            f"Nuovo saldo {iban_src}: € {_MOCK_SALDI[iban_src]:,.2f}."
         )
 
     return invia_bonifico
