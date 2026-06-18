@@ -7,27 +7,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.specialists.compliance_agent import build_compliance_agent
 from app.agents.specialists.operations_agent import build_operations_agent
 from app.agents.specialists.rating_agent import build_rating_agent
-from app.agents.tracing import get_tracer
 from app.core.config import settings
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = """Sei l'agente di triage di FinAssist AI. Il tuo compito
-è analizzare la richiesta dell'utente e delegarla allo specialista corretto.
+_SYSTEM_PROMPT = """Sei un agente di triage. Il tuo unico compito è
+analizzare la richiesta dell'utente e delegarla allo specialista corretto.
 
-Specialisti disponibili:
-- operations_agent: saldo, storico transazioni, bonifici (operazioni bancarie).
-- compliance_agent: verifica AML, documenti normativi e policy.
+Specialisti:
+- operations_agent: saldo, storico transazioni, bonifici.
+- compliance_agent: verifica AML, documenti normativi.
 - rating_agent: calcolo score finanziario e rating.
 
 Regole:
-- Rispondi sempre in italiano.
-- Analizza la richiesta e chiama lo specialista più appropriato.
-- Se la richiesta riguarda più ambiti, chiama più specialisti in sequenza.
-- Non superare MAI 2 livelli di profondità (triage → specialista).
-- Riporta all'utente il risultato finale in modo chiaro.
-- Se non sai cosa fare, chiedi chiarimenti all'utente.
+- Analizza la richiesta e chiama UNO specialista.
+- Se la richiesta tocca più ambiti, chiamali in sequenza.
+- Non superare MAI 2 livelli di profondità.
+- Non rispondere direttamente: usa sempre uno specialista.
 """
 
 
@@ -70,9 +67,9 @@ def build_triage_agent(
     agent = Agent(
         name="triage_agent",
         client=client,
-        description="Agente di triage che analizza le richieste e le indirizza allo specialista corretto.",
+        description="Instradamento richieste agli specialisti: operazioni, compliance, rating.",
         system_prompt=_SYSTEM_PROMPT,
-        max_steps=8,
+        max_steps=3,
         hooks=hooks,
     )
 

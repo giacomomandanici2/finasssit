@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.agents.triage_agent import build_triage_agent
+from app.agents.triage import build_triage_agent
 from app.agents.tracing import (
     TracingHooks,
     multi_agent_run_span,
