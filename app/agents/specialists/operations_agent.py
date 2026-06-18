@@ -93,6 +93,7 @@ def build_operations_agent(
     user_id: str,
     db: AsyncSession,
     client: ClientFactory | None = None,
+    hooks=None,
 ) -> Agent:
     if client is None:
         client = ClientFactory.create(provider=Provider.MOCK, api_key="", model="mock")
@@ -112,4 +113,5 @@ def build_operations_agent(
         system_prompt=_SYSTEM_PROMPT,
         tools=tools,
         max_steps=4,
+        hooks=hooks,
     )

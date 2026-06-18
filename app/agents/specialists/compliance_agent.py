@@ -6,7 +6,7 @@ from datapizza.tools import tool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.exceptions import ToolError
-from app.agents.tools import safe_tool, _MOCK_SALDI
+from app.agents.tools import safe_tool
 
 _SYSTEM_PROMPT = """Sei l'agente Compliance. Verifica operazioni
 sospette e consulta la documentazione normativa.
@@ -60,6 +60,7 @@ async def verifica_aml(
 def build_compliance_agent(
     db: AsyncSession,
     client: ClientFactory | None = None,
+    hooks=None,
 ) -> Agent:
     if client is None:
         client = ClientFactory.create(provider=Provider.MOCK, api_key="", model="mock")
@@ -78,4 +79,5 @@ def build_compliance_agent(
         system_prompt=_SYSTEM_PROMPT,
         tools=tools,
         max_steps=4,
+        hooks=hooks,
     )

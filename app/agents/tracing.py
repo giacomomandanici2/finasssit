@@ -51,20 +51,30 @@ def get_tracer() -> trace.Tracer:
 
 
 class TracingHooks(AgentHooks):
-    """Hooks with nested span support for multi-agent patterns.
+    """Hooks with nested span support + rate limit per-step.
 
     Span hierarchy:
         multi_agent.run
         └─ triage.step.N
             ├─ specialist.call.<name>   (via can_call / tool call)
             └─ specialist.step.M        (nested inside specialist call)
+
+    Ogni step di OGNI agente decrementa il RateLimitTracker condiviso.
     """
 
-    def __init__(self, tracer: trace.Tracer | None = None) -> None:
+    def __init__(
+        self,
+        tracer: trace.Tracer | None = None,
+        rate_limit_tracker=None,
+    ) -> None:
         self._tracer = tracer or get_tracer()
         self._span: trace.Span | None = None
+        self._rate_limit = rate_limit_tracker
 
     def before_step(self, context: StepContext) -> None:
+        if self._rate_limit is not None:
+            self._rate_limit.consume()
+
         span_name = f"agent.step.{context.step_index}"
         self._span = self._tracer.start_as_current_span(span_name)
         self._span.__enter__()

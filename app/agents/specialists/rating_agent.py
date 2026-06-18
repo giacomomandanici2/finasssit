@@ -72,6 +72,7 @@ async def calcola_score(
 
 def build_rating_agent(
     client: ClientFactory | None = None,
+    hooks=None,
 ) -> Agent:
     if client is None:
         client = ClientFactory.create(provider=Provider.MOCK, api_key="", model="mock")
@@ -83,4 +84,5 @@ def build_rating_agent(
         system_prompt=_SYSTEM_PROMPT,
         tools=[calcola_score],
         max_steps=3,
+        hooks=hooks,
     )

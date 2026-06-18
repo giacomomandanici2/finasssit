@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.specialists.compliance_agent import build_compliance_agent
 from app.agents.specialists.operations_agent import build_operations_agent
 from app.agents.specialists.rating_agent import build_rating_agent
+from app.agents.tracing import TracingHooks, get_tracer
 from app.core.config import settings
 from app.models.user import User
 
@@ -25,6 +26,7 @@ class AgentTeamFactory:
         self._db = db
         self._user_id = f"user_{user.id:03d}"
         self.client = self._build_client()
+        self._tracer = get_tracer()
 
     def _build_client(self):
         if settings.azure_openai_endpoint and settings.azure_openai_key:
@@ -50,9 +52,21 @@ class AgentTeamFactory:
             model="mock",
         )
 
-    def build_team(self) -> list[Agent]:
+    def build_team(
+        self,
+        hooks=None,
+        rate_limit_tracker=None,
+    ) -> list[Agent]:
         specialists = _ROLE_SPECIALIST_MAP.get(self._user.role, [])
         agents: list[Agent] = []
+
+        def _make_hooks():
+            if hooks is not None:
+                return hooks
+            return TracingHooks(
+                tracer=self._tracer,
+                rate_limit_tracker=rate_limit_tracker,
+            )
 
         if "operations" in specialists:
             agents.append(
@@ -60,6 +74,7 @@ class AgentTeamFactory:
                     user_id=self._user_id,
                     db=self._db,
                     client=self.client,
+                    hooks=_make_hooks(),
                 )
             )
         if "compliance" in specialists:
@@ -67,12 +82,14 @@ class AgentTeamFactory:
                 build_compliance_agent(
                     db=self._db,
                     client=self.client,
+                    hooks=_make_hooks(),
                 )
             )
         if "rating" in specialists:
             agents.append(
                 build_rating_agent(
                     client=self.client,
+                    hooks=_make_hooks(),
                 )
             )
 

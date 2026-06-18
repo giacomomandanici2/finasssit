@@ -28,9 +28,13 @@ def build_triage_agent(
     user: User,
     db: AsyncSession,
     hooks=None,
+    rate_limit_tracker=None,
 ) -> Agent:
     factory = AgentTeamFactory(user=user, db=db)
-    specialists = factory.build_team()
+    specialists = factory.build_team(
+        hooks=None,
+        rate_limit_tracker=rate_limit_tracker,
+    )
 
     agent = Agent(
         name="triage_agent",

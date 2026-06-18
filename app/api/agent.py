@@ -3,6 +3,7 @@ import re
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
+from app.agents.rate_limit import RateLimitTracker
 from app.agents.triage import build_triage_agent
 from app.agents.tracing import (
     TracingHooks,
@@ -54,8 +55,14 @@ async def agent_ask(
         db.add(session)
         await db.flush()
 
-    hooks = TracingHooks(_tracer)
-    agent = build_triage_agent(user=current_user, db=db, hooks=hooks)
+    rate_tracker = RateLimitTracker()
+    hooks = TracingHooks(_tracer, rate_limit_tracker=rate_tracker)
+    agent = build_triage_agent(
+        user=current_user,
+        db=db,
+        hooks=hooks,
+        rate_limit_tracker=rate_tracker,
+    )
 
     with multi_agent_run_span(
         tracer=_tracer,
