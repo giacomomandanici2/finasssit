@@ -25,22 +25,31 @@ async def get_current_user(ctx: Context) -> MCPUser | None:
     """Risolve l'utente autenticato dal context MCP.
 
     Cerca il token JWT in ordine:
-    1. ctx.meta["token"] (metadati JSON-RPC)
-    2. ctx.meta["authorization"] (header-style)
-    3. Variabile ambiente MCP_AUTH_TOKEN (solo demo)
+    1. ctx.request_context.request.headers (Authorization header HTTP)
+    2. ctx.request_context.meta (metadati JSON-RPC)
+    3. ctx.fastmcp (fallback)
+    4. Variabile ambiente MCP_AUTH_TOKEN (solo demo)
     """
     token: str | None = None
 
-    if ctx.meta:
-        token = ctx.meta.get("token") or ctx.meta.get("authorization")
+    # 1 — HTTP Authorization header via request_context
+    rc = ctx.request_context
+    if rc and rc.request:
+        auth_header = rc.request.headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
 
+    # 2 — JSON-RPC meta
+    if not token and rc and rc.meta:
+        token = rc.meta.get("token") or rc.meta.get("authorization")
+
+    # 3 — Env fallback (solo demo)
     if not token:
         token = os.getenv("MCP_AUTH_TOKEN")
 
     if not token:
         return None
 
-    # Stripea eventuale prefisso "Bearer "
     if token.startswith("Bearer "):
         token = token[7:]
 

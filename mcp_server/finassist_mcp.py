@@ -123,9 +123,10 @@ async def get_saldo(iban: str, ctx: Context) -> dict:
         audit.log_auth_result(None, False, reason=str(e))
         return {"error": str(e)}
 
-    tool = make_get_saldo(str(user.id))
+    user_key = f"user_{user.id:03d}"
+    tool = make_get_saldo(user_key)
     result = await tool(iban=iban)
-    owned = _USER_IBANS.get(str(user.id), [])
+    owned = _USER_IBANS.get(user_key, [])
     iban_clean = iban.strip().replace(" ", "")
     if iban_clean in owned and iban_clean in _MOCK_SALDI:
         payload = {
@@ -205,38 +206,49 @@ sse_app = mcp.sse_app()
 
 # ── FastAPI wrapper ─────────────────────────────
 
-from fastapi import FastAPI, Request
-from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi import FastAPI
 from starlette.responses import HTMLResponse, JSONResponse
 
 
-class AuthRateLimitMiddleware(BaseHTTPMiddleware):
-    """Middleware HTTP: valida Bearer token e setta rate limit su /sse e /messages."""
+class AuthASGIMiddleware:
+    """ASGI middleware: valida Bearer token su /sse e /messages.
 
-    async def dispatch(self, request: Request, call_next):
-        if request.url.path in ("/sse", "/messages"):
-            auth = request.headers.get("Authorization", "")
-            token = auth.removeprefix("Bearer ") if auth.startswith("Bearer ") else auth
+    Usa ASGI scope (non BaseHTTPMiddleware) per non rompere lo streaming SSE.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["path"] in ("/sse", "/messages"):
+            headers = dict(scope.get("headers", []))
+            raw = headers.get(b"authorization", b"").decode()
+            token = raw.removeprefix("Bearer ") if raw.startswith("Bearer ") else raw
             if not token:
-                return JSONResponse(
-                    status_code=401,
-                    content={"error": "Authorization header required (Bearer <JWT>)"},
-                )
+                return await _send_401(send, "Authorization header required (Bearer <JWT>)")
             from mcp_server.auth import _decode_and_resolve
             user = _decode_and_resolve(token)
             if user is None:
-                return JSONResponse(
-                    status_code=401,
-                    content={"error": "Invalid or expired token"},
-                )
-            request.state.mcp_user = user
+                return await _send_401(send, "Invalid or expired token")
             audit.log_auth_result(user, True)
-        response = await call_next(request)
-        return response
+        await self.app(scope, receive, send)
+
+
+async def _send_401(send, detail: str) -> None:
+    body = JSONResponse(status_code=401, content={"error": detail}).body
+    await send({
+        "type": "http.response.start",
+        "status": 401,
+        "headers": [(b"content-type", b"application/json")],
+    })
+    await send({
+        "type": "http.response.body",
+        "body": body,
+    })
 
 
 app = FastAPI(title="FinAssist MCP Server")
-app.add_middleware(AuthRateLimitMiddleware)
+app.add_middleware(AuthASGIMiddleware)
 
 
 @app.get("/")
