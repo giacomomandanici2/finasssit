@@ -1,0 +1,70 @@
+{
+  "$schema": "https://google.a2a/schemas/agent-card.json",
+  "name": "compliance_agent",
+  "version": "1.0.0",
+  "description": "Agente specializzato in compliance e antiriciclaggio. Verifica operazioni sospette e consulta documentazione normativa aziendale.",
+  "url": "http://localhost:8000/api/v1/agent/ask",
+  "authentication": {
+    "scheme": "bearer",
+    "credentials": "JWT token con ruolo compliance o admin"
+  },
+  "capabilities": [
+    "aml_screening",
+    "document_search"
+  ],
+  "skills": [
+    {
+      "id": "verifica_aml",
+      "name": "Verifica antiriciclaggio",
+      "description": "Controlla se un'operazione bancaria è sospetta: importi > 10.000 € o paesi ad alto rischio (IR, KP, SY, CU, MM).",
+      "input": {
+        "type": "object",
+        "properties": {
+          "iban": {
+            "type": "string",
+            "description": "IBAN da verificare"
+          },
+          "importo": {
+            "type": "number",
+            "description": "Importo dell'operazione in EUR"
+          }
+        },
+        "required": ["iban"]
+      },
+      "output": {
+        "type": "string",
+        "description": "Esito verifica AML: superata o non superata con dettaglio anomalie"
+      }
+    },
+    {
+      "id": "cerca_documenti",
+      "name": "Ricerca documentazione normativa",
+      "description": "Cerca policy e documenti aziendali per parola chiave. Il compliance agent ha accesso a documenti con visibilità compliance.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Parola chiave per la ricerca documenti"
+          }
+        },
+        "required": ["query"]
+      },
+      "output": {
+        "type": "string",
+        "description": "Documenti trovati o nessun risultato"
+      }
+    }
+  ],
+  "routing": {
+    "role": "compliance",
+    "trigger_phrases": [
+      "controlla operazione",
+      "verifica AML",
+      "documenti normativi",
+      "policy aziendale",
+      "antiriciclaggio"
+    ],
+    "team": "compliance"
+  }
+}
