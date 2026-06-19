@@ -1,8 +1,11 @@
-"""FinAssist MCP Server — Espone strumenti finanziari via MCP.
+"""FinAssist MCP Server — Auth, rate limit, audit log.
 
 Transport: HTTP+SSE su porta 8001.
 """
 
+from __future__ import annotations
+
+import json
 import logging
 import os
 from collections.abc import AsyncIterator
@@ -13,11 +16,16 @@ from mcp.server.fastmcp import FastMCP, Context
 from app.core.db import SessionLocal
 from app.agents.tools import make_get_saldo, _MOCK_SALDI, _USER_IBANS
 from app.rag.service import RAGService
+from mcp_server.auth import get_current_user, MCPUser
+from mcp_server import audit
 
 logger = logging.getLogger(__name__)
 
 _LOADED_POLICIES: dict[str, str] = {}
-_RATE_LIMIT: dict[str, int] = {}
+
+# Rate limit: user_id -> steps rimasti
+_RATE_LIMIT_BUDGET: dict[str, int] = {}
+_RATE_LIMIT_MAX = 30
 
 
 def _load_policies() -> dict[str, str]:
@@ -52,10 +60,14 @@ def _load_policies() -> dict[str, str]:
 
 @asynccontextmanager
 async def lifespan(server: FastMCP) -> AsyncIterator[None]:
-    global _LOADED_POLICIES, _RATE_LIMIT
+    global _LOADED_POLICIES, _RATE_LIMIT_BUDGET
     _LOADED_POLICIES = _load_policies()
-    _RATE_LIMIT = {}
-    logger.info("MCP server FinAssist avviato — %d policy caricate", len(_LOADED_POLICIES))
+    _RATE_LIMIT_BUDGET = {}
+    logger.info(
+        "MCP server FinAssist avviato — %d policy, rate max=%d",
+        len(_LOADED_POLICIES),
+        _RATE_LIMIT_MAX,
+    )
     yield
 
 
@@ -63,16 +75,40 @@ mcp = FastMCP(
     "FinAssist",
     instructions=(
         "Server MCP per operazioni bancarie e compliance. "
-        "Fornisce accesso a saldi, policy, e classificazione transazioni."
+        "Autenticazione: Bearer JWT in ctx.meta['token']."
     ),
     lifespan=lifespan,
 )
 
 
-def _resolve_user(ctx: Context) -> str | None:
-    if ctx.meta and "user_id" in ctx.meta:
-        return ctx.meta["user_id"]
-    return os.getenv("MCP_USER_ID")
+# ── Helper auth + rate limit ────────────────────
+
+class AuthError(Exception):
+    pass
+
+
+class RateLimitError(Exception):
+    pass
+
+
+async def _authenticate(ctx: Context) -> MCPUser:
+    user = await get_current_user(ctx)
+    if user is None:
+        raise AuthError("Unauthorized — fornisci un Bearer JWT valido in ctx.meta['token']")
+    return user
+
+
+def _check_rate_limit(user: MCPUser) -> int:
+    key = f"user:{user.id}"
+    remaining = _RATE_LIMIT_BUDGET.get(key, _RATE_LIMIT_MAX)
+    if remaining <= 0:
+        raise RateLimitError(
+            f"Rate limit superato per {user.username} "
+            f"({_RATE_LIMIT_MAX} step massimi)"
+        )
+    _RATE_LIMIT_BUDGET[key] = remaining - 1
+    audit.log_rate_limit(user, remaining - 1, _RATE_LIMIT_MAX)
+    return remaining - 1
 
 
 # ── Tools ─────────────────────────────────────
@@ -80,37 +116,56 @@ def _resolve_user(ctx: Context) -> str | None:
 @mcp.tool()
 async def get_saldo(iban: str, ctx: Context) -> dict:
     """Ottiene il saldo corrente per un IBAN intestato all'utente autenticato."""
-    user_id = _resolve_user(ctx)
-    if user_id is None:
-        return {"error": "Autenticazione richiesta — fornisci user_id nel contesto"}
-    tool = make_get_saldo(user_id)
+    try:
+        user = await _authenticate(ctx)
+        _check_rate_limit(user)
+    except (AuthError, RateLimitError) as e:
+        audit.log_auth_result(None, False, reason=str(e))
+        return {"error": str(e)}
+
+    tool = make_get_saldo(str(user.id))
     result = await tool(iban=iban)
-    owned = _USER_IBANS.get(user_id, [])
+    owned = _USER_IBANS.get(str(user.id), [])
     iban_clean = iban.strip().replace(" ", "")
     if iban_clean in owned and iban_clean in _MOCK_SALDI:
-        return {
+        payload = {
             "iban": iban_clean,
             "saldo": _MOCK_SALDI[iban_clean],
             "valuta": "EUR",
         }
+        audit.log_tool_call(user, "get_saldo", {"iban": iban_clean}, result=payload)
+        return payload
+    audit.log_tool_call(user, "get_saldo", {"iban": iban_clean}, error=result)
     return {"error": result}
 
 
 @mcp.tool()
-async def cerca_policy(query: str) -> list[str]:
+async def cerca_policy(query: str, ctx: Context) -> list[str]:
     """Cerca documenti policy nel knowledge base usando il motore RAG."""
     try:
+        user = await _authenticate(ctx)
+        _check_rate_limit(user)
+    except (AuthError, RateLimitError) as e:
+        audit.log_auth_result(None, False, reason=str(e))
+        return [f"Errore: {e}"]
+
+    params = {"query": query}
+    try:
         async with SessionLocal() as db:
-            svc = RAGService(db=db, user_role="admin")
+            svc = RAGService(db=db, user_role=user.role)
             response = await svc.ask(query)
         results: list[str] = []
         if response.answer:
             results.append(response.answer)
         if response.citations:
             results.append(f"Documenti consultati: {len(response.citations)}")
-        return results if results else ["Nessuna policy trovata per la query."]
+        if not results:
+            results = ["Nessuna policy trovata per la query."]
+        audit.log_tool_call(user, "cerca_policy", params, result=results)
+        return results
     except Exception as exc:
         logger.warning("RAG non disponibile: %s", exc)
+        audit.log_tool_call(user, "cerca_policy", params, error=str(exc))
         return [f"Servizio RAG non disponibile: {exc}"]
 
 
@@ -150,10 +205,38 @@ sse_app = mcp.sse_app()
 
 # ── FastAPI wrapper ─────────────────────────────
 
-from fastapi import FastAPI
-from starlette.responses import HTMLResponse
+from fastapi import FastAPI, Request
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import HTMLResponse, JSONResponse
+
+
+class AuthRateLimitMiddleware(BaseHTTPMiddleware):
+    """Middleware HTTP: valida Bearer token e setta rate limit su /sse e /messages."""
+
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path in ("/sse", "/messages"):
+            auth = request.headers.get("Authorization", "")
+            token = auth.removeprefix("Bearer ") if auth.startswith("Bearer ") else auth
+            if not token:
+                return JSONResponse(
+                    status_code=401,
+                    content={"error": "Authorization header required (Bearer <JWT>)"},
+                )
+            from mcp_server.auth import _decode_and_resolve
+            user = _decode_and_resolve(token)
+            if user is None:
+                return JSONResponse(
+                    status_code=401,
+                    content={"error": "Invalid or expired token"},
+                )
+            request.state.mcp_user = user
+            audit.log_auth_result(user, True)
+        response = await call_next(request)
+        return response
+
 
 app = FastAPI(title="FinAssist MCP Server")
+app.add_middleware(AuthRateLimitMiddleware)
 
 
 @app.get("/")
@@ -161,6 +244,7 @@ async def root():
     return HTMLResponse(
         "<h1>FinAssist MCP Server</h1>"
         "<p>Server MCP attivo su porta 8001.</p>"
+        "<p>Autenticazione: Bearer JWT via Authorization header o ctx.meta['token'].</p>"
         "<h2>Endpoints</h2>"
         "<ul>"
         '<li><a href="/health">/health</a> — Health check</li>'
@@ -175,6 +259,9 @@ async def health():
     return {
         "status": "ok",
         "server": "FinAssist MCP",
+        "auth": "Bearer JWT",
+        "rate_limit_max": _RATE_LIMIT_MAX,
+        "rate_limit_active": len(_RATE_LIMIT_BUDGET),
         "tools": ["get_saldo", "cerca_policy"],
         "resources": ["policy://{nome}"],
         "prompts": ["classifica_transazione_prompt"],
@@ -183,7 +270,6 @@ async def health():
 
 @app.get("/tools")
 async def list_tools():
-    from mcp.server.fastmcp import FastMCP
     tools = await mcp.list_tools()
     return {
         "tools": [
