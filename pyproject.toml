@@ -22,7 +22,8 @@ dependencies = [
     "tiktoken>=0.7",
     "pyjwt>=2.8",
     "passlib[bcrypt]>=1.7",
-    "redis>=5.0"
+    "redis>=5.0",
+    "mcp>=1.0"
 ]
 
 [project.optional-dependencies]
