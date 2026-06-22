@@ -29,7 +29,7 @@ Regole:
 
 
 def _build_client() -> MockClient:
-    if settings.azure_openai_endpoint and settings.azure_openai_key:
+    if settings.azure_openai_endpoint and settings.azure_openai_key.get_secret_value():
         try:
             base_url = (
                 f"{settings.azure_openai_endpoint}"
@@ -37,7 +37,7 @@ def _build_client() -> MockClient:
             )
             return ClientFactory.create(
                 provider=Provider.OPENAI,
-                api_key=settings.azure_openai_key,
+                api_key=settings.azure_openai_key.get_secret_value(),
                 model=settings.azure_openai_deployment,
                 base_url=base_url,
                 default_query={"api-version": settings.azure_openai_api_version},

@@ -19,7 +19,7 @@ async def get_current_user(
     try:
         payload = jwt.decode(
             credentials.credentials,
-            settings.jwt_secret,
+            settings.jwt_secret.get_secret_value(),
             algorithms=[settings.jwt_algorithm],
         )
     except jwt.ExpiredSignatureError:

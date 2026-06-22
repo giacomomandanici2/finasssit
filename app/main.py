@@ -80,7 +80,7 @@ async def readiness():
         try:
             from openai import AsyncAzureOpenAI
             client = AsyncAzureOpenAI(
-                api_key=settings.azure_openai_key,
+                api_key=settings.azure_openai_key.get_secret_value(),
                 api_version=settings.azure_openai_api_version,
                 azure_endpoint=settings.azure_openai_endpoint,
             )

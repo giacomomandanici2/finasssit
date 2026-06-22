@@ -153,7 +153,7 @@ def _make_default_mcp_client() -> MCPToolClient | None:
                 "iat": datetime.now(timezone.utc),
                 "exp": datetime.now(timezone.utc) + timedelta(hours=1),
             },
-            settings.jwt_secret,
+            settings.jwt_secret.get_secret_value(),
             algorithm=settings.jwt_algorithm,
         )
         return MCPToolClient(

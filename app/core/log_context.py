@@ -49,7 +49,7 @@ def extract_log_context(request: Request) -> None:
         try:
             payload = jwt.decode(
                 token,
-                settings.jwt_secret,
+                settings.jwt_secret.get_secret_value(),
                 algorithms=[settings.jwt_algorithm],
                 options={"verify_exp": False},
             )

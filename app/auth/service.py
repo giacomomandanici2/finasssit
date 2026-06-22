@@ -53,7 +53,7 @@ class AuthService:
         }
         token = jwt.encode(
             payload,
-            settings.jwt_secret,
+            settings.jwt_secret.get_secret_value(),
             algorithm=settings.jwt_algorithm,
         )
 

@@ -61,7 +61,7 @@ def _decode_and_resolve(token: str) -> MCPUser | None:
     try:
         payload = jwt.decode(
             token,
-            settings.jwt_secret,
+            settings.jwt_secret.get_secret_value(),
             algorithms=[settings.jwt_algorithm],
         )
     except jwt.ExpiredSignatureError:

@@ -94,7 +94,7 @@ class LLMClient:
     def __init__(self):
         self._client = AsyncAzureOpenAI(
             azure_endpoint=settings.azure_openai_endpoint,
-            api_key=settings.azure_openai_key,
+            api_key=settings.azure_openai_key.get_secret_value(),
             api_version=settings.azure_openai_api_version,
             timeout=30.0,
         )
