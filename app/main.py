@@ -15,10 +15,13 @@ from app.auth.router import router as auth_router
 from app.core.config import settings
 from app.core.db import engine
 from app.core.lifespan import lifespan
+from app.core.log_context import extract_log_context, setup_logging
 from app.core.redis import get_redis
 from app.core.slowrate import limiter
 
 logger = logging.getLogger(__name__)
+
+setup_logging()
 
 
 app = FastAPI(
@@ -28,6 +31,14 @@ app = FastAPI(
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.middleware("http")
+async def log_context_middleware(request, call_next):
+    extract_log_context(request)
+    response = await call_next(request)
+    return response
+
 
 app.include_router(transactions_router)
 app.include_router(v1_router)
