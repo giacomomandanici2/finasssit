@@ -2,6 +2,8 @@ import logging
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 
 from app.api.agent import router as agent_router
@@ -14,6 +16,7 @@ from app.core.config import settings
 from app.core.db import engine
 from app.core.lifespan import lifespan
 from app.core.redis import get_redis
+from app.core.slowrate import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +26,8 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.include_router(transactions_router)
 app.include_router(v1_router)
@@ -33,11 +38,13 @@ app.include_router(agent_router)
 
 
 @app.get("/health/live")
+@limiter.exempt
 async def liveness():
     return JSONResponse({"status": "alive"})
 
 
 @app.get("/health/ready")
+@limiter.exempt
 async def readiness():
     checks: dict[str, str | bool] = {}
 

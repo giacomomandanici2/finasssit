@@ -12,6 +12,7 @@ from app.agents.tracing import (
 )
 from app.auth.deps import CurrentUser
 from app.core.db import SessionDep
+from app.core.slowrate import limiter
 from app.models.chat_session import ChatSession
 from app.models.message import Message
 from app.repositories.messages import MessagesRepository
@@ -38,6 +39,7 @@ router = APIRouter(prefix="/api/v1/agent", tags=["agent"])
 
 
 @router.post("/ask", response_model=AgentAskResponse)
+@limiter.limit("5/minute")
 async def agent_ask(
     body: AgentAskRequest,
     db: SessionDep,
