@@ -23,9 +23,12 @@ dependencies = [
     "tiktoken>=0.7",
     "pyjwt>=2.8",
     "passlib[bcrypt]>=1.7",
+    "bcrypt>=3.1,<4.1",
     "redis>=5.0",
     "mcp>=1.0",
-    "slowapi>=0.1.9"
+    "slowapi>=0.1.9",
+    "opentelemetry-instrumentation-fastapi>=0.63b",
+    "opentelemetry-instrumentation-httpx>=0.63b"
 ]
 
 [project.optional-dependencies]

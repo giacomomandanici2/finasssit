@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 
 from app.auth.deps import CurrentUser
@@ -25,6 +25,7 @@ router = APIRouter(
 @router.post("/answer", response_model=RAGAnswerResponse)
 @limiter.limit("10/minute")
 async def rag_answer(
+    request: Request,
     body: RAGAnswerRequest,
     db: SessionDep,
     current_user: CurrentUser,

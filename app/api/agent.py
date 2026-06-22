@@ -1,6 +1,6 @@
 import re
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from app.agents.rate_limit import RateLimitTracker
@@ -41,6 +41,7 @@ router = APIRouter(prefix="/api/v1/agent", tags=["agent"])
 @router.post("/ask", response_model=AgentAskResponse)
 @limiter.limit("5/minute")
 async def agent_ask(
+    request: Request,
     body: AgentAskRequest,
     db: SessionDep,
     current_user: CurrentUser,

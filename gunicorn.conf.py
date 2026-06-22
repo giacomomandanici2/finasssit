@@ -11,3 +11,5 @@ keepalive = 5
 accesslog = "-"
 errorlog = "-"
 loglevel = "info"
+
+worker_tmp_dir = "/tmp"

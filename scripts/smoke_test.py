@@ -27,15 +27,15 @@ FAIL = 0
 def ok(msg: str) -> None:
     global PASS
     PASS += 1
-    print(f"  ✓ {msg}")
+    print(f"  [PASS] {msg}")
 
 
 def fail(msg: str, detail: str = "") -> None:
     global FAIL
     FAIL += 1
-    print(f"  ✗ {msg}")
+    print(f"  [FAIL] {msg}")
     if detail:
-        print(f"    └─ {detail}")
+        print(f"    +- {detail}")
 
 
 def check(name: str, condition: bool, detail: str = "") -> None:
@@ -62,37 +62,52 @@ def main(base_url: str) -> None:
     print(SEP)
 
     # ============================================================
+    # 0. Connection check
+    # ============================================================
+    print("\n0. Connection check")
+    try:
+        r = requests.get(f"{base_url}/health/live", timeout=5)
+        r.raise_for_status()
+        ok(f"Server raggiungibile su {base_url}")
+    except requests.ConnectionError:
+        print(f"\n  [WARN] Server non raggiungibile su {base_url}.")
+        print("  Assicurati che lo stack sia avviato:")
+        print("     docker compose up --build")
+        print()
+        sys.exit(1)
+
+    # ============================================================
     # 1. Healthcheck
     # ============================================================
     print("\n1. Healthcheck")
     r = request("GET", f"{base_url}/health/live")
-    check("GET /health/live → 200", r.status_code == 200, r.text)
+    check("GET /health/live -> 200", r.status_code == 200, r.text)
 
     r = request("GET", f"{base_url}/health/ready")
     if r.status_code == 200:
-        ok("GET /health/ready → 200")
+        ok("GET /health/ready -> 200")
     elif r.status_code == 503:
-        ok("GET /health/ready → 503 (degraded)")
+        ok("GET /health/ready -> 503 (degraded)")
     else:
-        fail("GET /health/ready → unexpected", str(r.status_code))
+        fail("GET /health/ready -> unexpected", str(r.status_code))
 
     # ============================================================
-    # 2. Auth flow: Register → Login → JWT
+    # 2. Auth flow: Register -> Login -> JWT
     # ============================================================
     print("\n2. Auth flow")
     test_user = f"smoke_{int(time.time())}"
     r = request("POST", f"{base_url}/api/v1/auth/register",
                 json={"username": test_user, "password": "test123", "role": "retail"})
     if r.status_code == 201:
-        ok(f"POST /auth/register → {r.status_code} (created)")
+        ok(f"POST /auth/register -> {r.status_code} (created)")
     elif r.status_code == 409:
-        ok(f"POST /auth/register → {r.status_code} (already exists)")
+        ok(f"POST /auth/register -> {r.status_code} (already exists)")
     else:
         fail("POST /auth/register", f"status={r.status_code} body={r.text}")
 
     r = request("POST", f"{base_url}/api/v1/auth/login",
                 json={"username": test_user, "password": "test123"})
-    check("POST /auth/login → 200", r.status_code == 200, r.text)
+    check("POST /auth/login -> 200", r.status_code == 200, r.text)
     if r.status_code == 200:
         token = r.json().get("access_token")
         check("JWT token ricevuto", bool(token))
@@ -100,14 +115,14 @@ def main(base_url: str) -> None:
     # Login come admin (pre-seed)
     r = request("POST", f"{base_url}/api/v1/auth/login",
                 json={"username": "admin", "password": "admin"})
-    check("POST /auth/login (admin) → 200", r.status_code == 200, r.text)
+    check("POST /auth/login (admin) -> 200", r.status_code == 200, r.text)
     if r.status_code == 200:
         token = r.json().get("access_token")
 
     # Login come compliance_user (pre-seed)
     r = request("POST", f"{base_url}/api/v1/auth/login",
                 json={"username": "compliance_user", "password": "compliance_lead"})
-    check("POST /auth/login (compliance) → 200", r.status_code == 200, r.text)
+    check("POST /auth/login (compliance) -> 200", r.status_code == 200, r.text)
     if r.status_code == 200:
         compliance_token = r.json().get("access_token")
 
@@ -115,7 +130,7 @@ def main(base_url: str) -> None:
     compliance_headers = {"Authorization": f"Bearer {compliance_token}"} if compliance_token else {}
 
     if not token:
-        print("  ⚠ Nessun token JWT — salto test che richiedono auth")
+        print("  [WARN] Nessun token JWT — salto test che richiedono auth")
         print(SEP)
         sys.exit(1)
 
@@ -133,10 +148,10 @@ def main(base_url: str) -> None:
                     "description": "Smoke test transazione",
                     "type": "wire_transfer",
                 })
-    check("POST /score → 200/201", r.status_code in (200, 201), r.text)
+    check("POST /score -> 200/201", r.status_code in (200, 201), r.text)
 
     r = request("GET", f"{base_url}/api/v1/recent?limit=5", headers=headers)
-    check("GET /api/v1/recent → 200", r.status_code == 200, r.text)
+    check("GET /api/v1/recent -> 200", r.status_code == 200, r.text)
 
     if r.status_code == 200:
         data = r.json()
@@ -152,7 +167,7 @@ def main(base_url: str) -> None:
                 headers=headers,
                 json={"query": "cossa serve per aprire un conto", "session_id": None})
     if r.status_code == 200:
-        ok("POST /rag/answer → 200")
+        ok("POST /rag/answer -> 200")
         data = r.json()
         if data.get("citations"):
             ok(f"Risposta con {len(data['citations'])} citations")
@@ -162,14 +177,14 @@ def main(base_url: str) -> None:
         fail("POST /rag/answer", f"status={r.status_code} body={r.text}")
 
     # ============================================================
-    # 5. Agent multi-agente (admin → retail flow)
+    # 5. Agent multi-agente (admin -> retail flow)
     # ============================================================
     print("\n5. Agent — saldo (retail)")
     r = request("POST", f"{base_url}/api/v1/agent/ask",
                 headers=headers,
                 json={"query": "qual è il mio saldo?", "session_id": None})
     if r.status_code == 200:
-        ok("POST /agent/ask (saldo) → 200")
+        ok("POST /agent/ask (saldo) -> 200")
         data = r.json()
         check("Risposta contiene answer", bool(data.get("answer")), str(data)[:300])
         check("Risposta contiene specialist_used", bool(data.get("specialist_used")), str(data.get("specialist_used")))
@@ -178,14 +193,14 @@ def main(base_url: str) -> None:
         fail("POST /agent/ask (saldo)", f"status={r.status_code} body={r.text}")
 
     # ============================================================
-    # 6. Agent compliance_user → compliance_agent
+    # 6. Agent compliance_user -> compliance_agent
     # ============================================================
     print("\n6. Agent — compliance (MIFID)")
     r = request("POST", f"{base_url}/api/v1/agent/ask",
                 headers=compliance_headers,
                 json={"query": "cosa dice la MIFID?"})
     if r.status_code == 200:
-        ok("POST /agent/ask (MIFID) → 200")
+        ok("POST /agent/ask (MIFID) -> 200")
         data = r.json()
         check("Risposta contiene answer", bool(data.get("answer")), str(data)[:300])
         specialist = data.get("specialist_used")
@@ -207,12 +222,12 @@ def main(base_url: str) -> None:
     )
     r = request("GET", f"{MCP_URL}/tools", headers={"Authorization": f"Bearer {mcp_token}"})
     if r.status_code == 200:
-        ok("GET /tools → 200")
+        ok("GET /tools -> 200")
     else:
         fail("GET /tools", f"status={r.status_code} body={r.text}")
 
     r = request("GET", f"{MCP_URL}/health", headers={"Authorization": f"Bearer {mcp_token}"})
-    check("GET /health (MCP) → 200", r.status_code == 200, r.text)
+    check("GET /health (MCP) -> 200", r.status_code == 200, r.text)
 
     # ============================================================
     # 8. RESULT
