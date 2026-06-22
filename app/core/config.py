@@ -25,5 +25,7 @@ class Settings(BaseSettings):
     azure_openai_deployment: str = ""
     azure_openai_api_version: str = "2024-10-21"
 
+    otel_exporter_otlp_endpoint: str = ""
+
 
 settings = Settings()

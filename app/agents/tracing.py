@@ -2,42 +2,11 @@ from contextlib import contextmanager
 from collections.abc import Iterator
 
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import (
-    BatchSpanProcessor,
-    ConsoleSpanExporter,
-    SimpleSpanProcessor,
-)
+from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
 from opentelemetry.sdk.resources import Resource
 
 from datapizza.agents import AgentHooks, StepContext, StepResult
-
-
-def setup_tracing(
-    service_name: str = "finassist",
-    service_version: str = "0.1.0",
-    enable_console: bool = True,
-    enable_otlp: bool = True,
-) -> trace.Tracer:
-    resource = Resource.create({
-        "service.name": service_name,
-        "service.version": service_version,
-    })
-    provider = TracerProvider(resource=resource)
-
-    if enable_console:
-        provider.add_span_processor(
-            SimpleSpanProcessor(ConsoleSpanExporter())
-        )
-
-    if enable_otlp:
-        provider.add_span_processor(
-            BatchSpanProcessor(OTLPSpanExporter())
-        )
-
-    trace.set_tracer_provider(provider)
-    return provider.get_tracer(__name__)
 
 
 _tracer: trace.Tracer | None = None
@@ -45,8 +14,20 @@ _tracer: trace.Tracer | None = None
 
 def get_tracer() -> trace.Tracer:
     global _tracer
-    if _tracer is None:
-        _tracer = setup_tracing()
+    if _tracer is not None:
+        return _tracer
+    provider = trace.get_tracer_provider()
+    if isinstance(provider, TracerProvider):
+        _tracer = provider.get_tracer(__name__)
+    else:
+        resource = Resource.create({
+            "service.name": "finassist",
+            "service.version": "0.1.0",
+        })
+        provider = TracerProvider(resource=resource)
+        provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
+        trace.set_tracer_provider(provider)
+        _tracer = provider.get_tracer(__name__)
     return _tracer
 
 

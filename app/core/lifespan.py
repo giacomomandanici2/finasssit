@@ -8,6 +8,7 @@ from opentelemetry import trace
 
 from app.core.config import settings
 from app.core.db import engine
+from app.core.otel import setup_otel
 from app.core.redis import close_redis, init_redis
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,7 @@ async def _shutdown_with_timeout(coro, name: str):
 async def lifespan(app: FastAPI):
 
     logger.info("[startup] FinAssist starting...")
+    setup_otel(app)
     try:
         await init_redis(settings.redis_url)
     except Exception:
