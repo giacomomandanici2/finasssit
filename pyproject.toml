@@ -6,6 +6,7 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.27",
+    "gunicorn>=22.0",
     "pydantic>=2.5",
     "pydantic-settings>=2.0",
     "sqlalchemy[asyncio]>=2.0.30",
@@ -45,4 +46,4 @@ build-backend = "setuptools.build_meta"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 [tool.setuptools]
-packages = ["app"]
+packages = ["app", "mcp_server"]
