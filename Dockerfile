@@ -52,6 +52,6 @@ USER appuser
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD python -c "import http.client; c=http.client.HTTPConnection('localhost',8000); c.request('GET','/health'); r=c.getresponse(); exit(0 if r.status==200 else 1)"
+    CMD python -c "import http.client; c=http.client.HTTPConnection('localhost',8000); c.request('GET','/health/live'); r=c.getresponse(); exit(0 if r.status==200 else 1)"
 
 CMD ["gunicorn", "-c", "gunicorn.conf.py", "app.main:app"]
